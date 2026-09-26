@@ -1,0 +1,1 @@
+FedMLP-GAN-IDS is a blockchain-integrated federated intrusion detection framework that combines MLP-based GAN for local data augmentation, Federated Learning for privacy-preserving training, and blockchain-based model validation. The framework is evaluated on the UNSW-NB15 dataset
