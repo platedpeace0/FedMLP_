@@ -3,26 +3,7 @@ try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
-#!/usr/bin/env python3
-"""
-========================================================================================
-UNIFIED FEDERATED LEARNING FOR NETWORK INTRUSION DETECTION (ALL-IN-ONE PIPELINE)
-Dataset: UNSW-NB15 (80% Train, 20% Test Split | 257,673 Total Records)
-Supported Modules:
-  1. Fed-MLP (GAN)  [Checked Proposed Architecture - Local GAN Minority Augmentation]
-  2. Fed-MLP        [Federated Multi-Layer Perceptron Baseline]
-  3. FedAvg         [Classical Federated Averaging - McMahan et al.]
-  4. FedProx        [Heterogeneity-Aware Federated Proximal - Li et al. (mu=0.01)]
 
-Configurations:
-  - Clients: {3, 20}
-  - Seeds: {42, 52, 62, 72, 82}
-  - Distributions: [ IID ] & [ NIID ] (Dirichlet Skew, alpha=0.5)
-  - Confusion Matrix Metrics: True Positives (TP), True Negatives (TN),
-                              False Positives (FP), False Negatives (FN),
-                              Accuracy, Precision, Recall, Specificity, F1-Score
-========================================================================================
-"""
 
 import os
 import sys
@@ -46,9 +27,7 @@ from torch.utils.data import TensorDataset, DataLoader
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# ======================================================================================
-# 1. DATA PREPROCESSING & 80/20 STRATIFIED SPLIT
-# ======================================================================================
+
 
 def load_and_preprocess_data(
     train_csv_path="UNSW_NB15_training-set (1).csv",
@@ -58,11 +37,7 @@ def load_and_preprocess_data(
     output_cache="preprocessed/unsw_nb15_80_20.npz",
     force_recompute=False
 ):
-    """
-    Loads raw UNSW-NB15 files, merges them into the complete 257,673 record pool,
-    performs stratified 80% train / 20% test split, encodes categoricals,
-    and applies Standard Scaling strictly fitted on the training split to prevent data leakage.
-    """
+   
     if not force_recompute and os.path.exists(output_cache):
         print(f"[*] Loading preprocessed cache from: {output_cache}")
         data = np.load(output_cache, allow_pickle=True)
@@ -158,9 +133,7 @@ def load_and_preprocess_data(
     return X_train, y_train, y_train_cat, X_test, y_test, y_test_cat, feature_cols, list(cat_classes)
 
 
-# ======================================================================================
-# 2. FEDERATED DATA PARTITIONING (IID & DIRICHLET NON-IID)
-# ======================================================================================
+
 
 def partition_federated_data(
     y_train,
@@ -170,12 +143,7 @@ def partition_federated_data(
     seed=42,
     alpha=0.5
 ):
-    """
-    Partitions the 80% training dataset across K clients.
-    - IID: Uniform random sharding preserving proportional class balance across all clients.
-    - NIID (Non-IID): Dirichlet distribution (alpha=0.5) over attack subcategories,
-      simulating localized subnet attacks where certain clients encounter specific threats.
-    """
+   
     np.random.seed(seed)
     num_samples = len(y_train)
     client_indices = {i: [] for i in range(num_clients)}
@@ -217,19 +185,10 @@ def partition_federated_data(
     return client_indices
 
 
-# ======================================================================================
-# 3. NEURAL NETWORK ARCHITECTURES (HYPERTUNED MLP & LOCAL GAN)
-# ======================================================================================
+
 
 class IntrusionMLP(nn.Module):
-    """
-    Hypertuned Deep Multi-Layer Perceptron for Intrusion Detection.
-    Features:
-    - 3 Fully Connected Hidden Layers with Batch Normalization for smooth loss landscape
-    - LeakyReLU activation to prevent dead neurons on sparse features
-    - Residual connection / Dropout (0.2) to prevent overfitting
-    - Optimized to achieve >90% test accuracy on UNSW-NB15
-    """
+  
     def __init__(self, in_features=42, hidden_dims=[128, 64, 32], num_classes=2, dropout_rate=0.2):
         super(IntrusionMLP, self).__init__()
         
@@ -297,7 +256,7 @@ class LocalDiscriminator(nn.Module):
         return self.net(x)
 
 
-def train_local_gan(X_minority, in_features=42, latent_dim=16, epochs=8, batch_size=64, lr=0.0003):
+def train_local_gan(X_minority, in_features=42, latent_dim=16, epochs=800, batch_size=64, lr=0.0003):
     """
     Trains a lightweight local Generative Adversarial Network strictly on client device.
     Zero raw or synthetic data leaves the client, strictly adhering to privacy preservation.
@@ -348,7 +307,7 @@ def train_local_gan(X_minority, in_features=42, latent_dim=16, epochs=8, batch_s
 
 
 def generate_synthetic_samples(G, num_samples, in_features=42, latent_dim=16):
-    """Generates synthetic flow feature vectors using the trained local Generator"""
+   
     G.eval()
     with torch.no_grad():
         z = torch.randn(num_samples, latent_dim, device=DEVICE)
@@ -356,9 +315,7 @@ def generate_synthetic_samples(G, num_samples, in_features=42, latent_dim=16):
     return synth_x
 
 
-# ======================================================================================
-# 4. FEDERATED AGGREGATION & CLIENT LOCAL OPTIMIZATION
-# ======================================================================================
+
 
 def aggregate_weights(client_weights_list, sample_counts):
     """
@@ -489,9 +446,7 @@ def evaluate_model(model, X_test, y_test, batch_size=1024):
     }
 
 
-# ======================================================================================
-# 5. CORE FEDERATED TRAINING PIPELINE
-# ======================================================================================
+
 
 def run_federated_pipeline(
     X_train,
@@ -542,10 +497,10 @@ def run_federated_pipeline(
             c1 = np.sum(y_c == 1)
 
             # Detect local class imbalance
-            if c0 > 0 and c1 > 0 and (c0 < c1 * 0.6 or c1 < c0 * 0.6):
+            if c0 > 0 and c1 > 0 and (c0 < c1 * 0.6 or c1 < c0 * 0.4):
                 minority_class = 0 if c0 < c1 else 1
                 minority_samples = X_c[y_c == minority_class]
-                num_needed = min(int(abs(c1 - c0) * aug_ratio), 4000)
+                num_needed = min(int(abs(c1 - c0) * aug_ratio), 1000)
 
                 if len(minority_samples) >= 30 and num_needed > 20:
                     G = train_local_gan(minority_samples, in_features=num_features, epochs=6, lr=0.0003)
@@ -603,9 +558,6 @@ def run_federated_pipeline(
     return global_model, final_metrics
 
 
-# ======================================================================================
-# 6. BENCHMARK MATRIX GENERATOR (ALL 16 SETUPS & CONFUSION MATRIX TABLE)
-# ======================================================================================
 
 def run_benchmark_matrix(
     X_train,
@@ -693,9 +645,7 @@ def run_benchmark_matrix(
     return df_res
 
 
-# ======================================================================================
-# 7. CLI COMMAND INTERFACE
-# ======================================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="Unified Federated Learning for Network Intrusion Detection (UNSW-NB15)")
